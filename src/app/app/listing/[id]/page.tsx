@@ -13,6 +13,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
     const [p, setP] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [images, setImages] = useState<string[]>([]);
 
     async function load() {
         const res = await getProperty(id);
@@ -20,6 +21,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
             setP(null);
         } else {
             setP(res);
+            setImages(res.images?.map((img: any) => img.url) || []);
         }
         setLoading(false);
     }
@@ -27,6 +29,44 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
     useEffect(() => {
         load();
     }, [id]);
+
+    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files) return;
+
+        Array.from(files).forEach(file => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    const maxDim = 800;
+
+                    if (width > height && width > maxDim) {
+                        height *= maxDim / width;
+                        width = maxDim;
+                    } else if (height > maxDim) {
+                        width *= maxDim / height;
+                        height = maxDim;
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx?.drawImage(img, 0, 0, width, height);
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                    setImages(prev => [...prev, dataUrl]);
+                };
+                img.src = reader.result as string;
+            };
+            reader.readAsDataURL(file);
+        });
+    };
+
+    const removeImage = (index: number) => {
+        setImages(prev => prev.filter((_, i) => i !== index));
+    };
 
     if (loading) return <div className="p-4 text-center text-secondary">Memuat detail properti...</div>;
 
@@ -72,8 +112,25 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
     };
 
     const copyShareLink = () => {
-        navigator.clipboard.writeText(publicUrl);
-        alert('Link Landing Page berhasil disalin!');
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(publicUrl);
+            alert('Link Landing Page berhasil disalin!');
+        } else {
+            const textArea = document.createElement("textarea");
+            textArea.value = publicUrl;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-999999px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                alert('Link Landing Page berhasil disalin!');
+            } catch (err) {
+                alert('Gagal menyalin link. Silakan salin secara manual.');
+            }
+            textArea.remove();
+        }
     };
 
     return (
@@ -158,6 +215,8 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
                 <div className="card-body p-4">
                     <h5 className="fw-bold mb-4">Edit Detail Properti</h5>
                     <form className="row g-3" onSubmit={handleSave}>
+                        <input type="hidden" name="images" value={JSON.stringify(images)} />
+                        
                         <div className="col-12">
                             <label className="form-label small fw-bold text-secondary">NAMA PROPERTI</label>
                             <input name="title" defaultValue={p.title} required className="form-control form-control-lg rounded-4 border-2" />
@@ -214,6 +273,24 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
                         <div className="col-12">
                             <label className="form-label small fw-bold text-secondary">DESKRIPSI LENGKAP</label>
                             <textarea name="description" defaultValue={p.description} className="form-control rounded-4 border-2" rows={5}></textarea>
+                        </div>
+
+                        <div className="col-12">
+                            <label className="form-label small fw-bold text-secondary d-block">GALERI FOTO</label>
+                            <div className="d-flex flex-wrap gap-2 mb-2">
+                                {images.map((img, i) => (
+                                    <div key={i} className="position-relative" style={{ width: '80px', height: '80px' }}>
+                                        <img src={img} className="w-100 h-100 object-fit-cover rounded-3 border" alt="preview" />
+                                        <button type="button" onClick={() => removeImage(i)} className="position-absolute top-0 end-0 btn btn-danger btn-sm p-0 rounded-circle" style={{ width: '20px', height: '20px', marginTop: '-8px', marginRight: '-8px' }}>×</button>
+                                    </div>
+                                ))}
+                                <label className="btn btn-outline-dark d-flex flex-column align-items-center justify-content-center border-dashed rounded-3" style={{ width: '80px', height: '80px', borderStyle: 'dashed' }}>
+                                    <ion-icon name="camera-outline" style={{ fontSize: '24px' }}></ion-icon>
+                                    <span className="small mt-1">Upload</span>
+                                    <input type="file" multiple accept="image/*" className="d-none" onChange={handleImageChange} />
+                                </label>
+                            </div>
+                            <div className="small text-secondary">Tips: Foto pertama akan menjadi cover utama.</div>
                         </div>
 
                         <div className="col-12 d-flex gap-2 pt-3">

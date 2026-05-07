@@ -87,6 +87,22 @@ export async function getMe() {
     return getSession()
 }
 
+async function logActivity(session: any, action: string, details?: string) {
+    if (!session) return;
+    try {
+        await prisma.activityLog.create({
+            data: {
+                action,
+                details,
+                userId: session.id,
+                agencyId: session.agencyId
+            }
+        });
+    } catch (e) {
+        console.error("Failed to log activity:", e);
+    }
+}
+
 export async function logoutAgent() {
     ; (await cookies()).delete('session')
     redirect('/')
@@ -301,9 +317,39 @@ export async function getProperty(id: string) {
                         payments: { orderBy: { paidAt: 'asc' } }
                     },
                     orderBy: { createdAt: 'desc' }
-                }
+                },
+                addedBy: { select: { name: true, phoneNumber: true } }
             }
         })
+    } catch {
+        return null
+    }
+}
+
+export async function getPublicProperty(id: string) {
+    try {
+        const prop = await prisma.property.findUnique({
+            where: { id },
+            include: {
+                images: true,
+                addedBy: { select: { name: true, phoneNumber: true } },
+                agency: { select: { name: true, users: { where: { role: 'ADMIN' }, select: { name: true, phoneNumber: true } } } }
+            }
+        })
+        if (!prop) return null;
+        
+        const admin = prop.agency?.users?.[0];
+        const defaultName = admin?.name || 'Agen';
+        const defaultPhone = admin?.phoneNumber || '';
+
+        return {
+            ...prop,
+            agent: {
+                name: prop.addedBy?.name || defaultName,
+                phoneNumber: prop.addedBy?.phoneNumber || defaultPhone,
+                agency: prop.agency?.name || 'AsanaPro Agent'
+            }
+        }
     } catch {
         return null
     }
@@ -331,9 +377,11 @@ export async function createProperty(formData: FormData) {
                 certificate: formData.get('certificate') as string || undefined,
                 features: formData.get('features') as string || undefined,
                 agencyId: session.agencyId,
+                addedById: session.id,
                 images: { create: images.map((url: string) => ({ url })) }
             }
         })
+        await logActivity(session, "Menambahkan Properti", `Menambahkan properti: ${prop.title}`);
         revalidatePath('/app/listing')
         return { success: true, propertyId: prop.id }
     } catch (e) {
@@ -364,6 +412,19 @@ export async function updateProperty(id: string, formData: FormData) {
                 features: formData.get('features') as string || undefined,
             }
         })
+        
+        const imagesRaw = formData.get('images') as string
+        if (imagesRaw) {
+            const images = JSON.parse(imagesRaw || '[]')
+            await prisma.propertyImage.deleteMany({ where: { propertyId: id } })
+            if (images.length > 0) {
+                await prisma.propertyImage.createMany({
+                    data: images.map((url: string) => ({ url, propertyId: id }))
+                })
+            }
+        }
+
+        await logActivity(session, "Mengubah Properti", `Mengubah properti ID: ${id}`);
         revalidatePath(`/app/listing/${id}`)
         revalidatePath('/app/listing')
         return { success: true }
@@ -464,6 +525,7 @@ export async function createClient(formData: FormData) {
                 marketingId: session.id
             }
         })
+        await logActivity(session, "Menambahkan Klien", `Menambahkan klien: ${client.name}`);
         revalidatePath('/app/crm')
         return { success: true, clientId: client.id }
     } catch (e) {
@@ -535,6 +597,7 @@ export async function addFollowUp(clientId: string, formData: FormData) {
                 clientId
             }
         })
+        await logActivity(session, "Follow Up Klien", `Tipe: ${formData.get('type') || 'WHATSAPP'}`);
         revalidatePath(`/app/crm/${clientId}`)
         return { success: true }
     } catch {
@@ -638,6 +701,7 @@ export async function createDeal(formData: FormData) {
             where: { id: formData.get('propertyId') as string },
             data: { status: dealType === 'SALE' ? 'SOLD' : 'RENTED' }
         })
+        await logActivity(session, "Menambahkan Deal", `Tipe: ${dealType}, Harga: ${dealPrice}`);
         revalidatePath('/app/deals')
         revalidatePath('/app/listing')
         return { success: true, dealId: deal.id }
@@ -780,6 +844,7 @@ export async function addPayment(formData: FormData) {
             }
         }
 
+        await logActivity(session, "Menambahkan Pembayaran", `Nominal: ${formData.get('amount')}, Tipe: ${formData.get('paymentType') || 'FULL_PAYMENT'}`);
         revalidatePath('/app/deals')
         return { success: true }
     } catch {
@@ -1075,6 +1140,32 @@ export async function getAdminReports() {
     } catch (e) {
         console.error(e)
         return null
+    }
+}
+
+// ─────────────────────────────────────────────
+// ACTIVITY LOGS
+// ─────────────────────────────────────────────
+export async function getActivityLogs(marketingId?: string) {
+    const session = await getSession()
+    if (!session) return []
+
+    try {
+        const where: any = { agencyId: session.agencyId }
+        if (session.role === 'MARKETING') {
+            where.userId = session.id
+        } else if (marketingId) {
+            where.userId = marketingId
+        }
+
+        return await prisma.activityLog.findMany({
+            where,
+            include: { user: { select: { name: true } } },
+            orderBy: { createdAt: 'desc' },
+            take: 100
+        })
+    } catch {
+        return []
     }
 }
 

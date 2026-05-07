@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, use } from 'react';
-import { getProperty } from '@/app/actions';
+import { getPublicProperty } from '@/app/actions';
 import { Utils } from '@/lib/utils';
 import Link from 'next/link';
 
@@ -12,7 +12,7 @@ export default function PublicPropertyPage({ params }: { params: Promise<{ id: s
 
     useEffect(() => {
         async function load() {
-            const res = await getProperty(id);
+            const res = await getPublicProperty(id);
             setP(res);
             setLoading(false);
         }
@@ -41,14 +41,34 @@ export default function PublicPropertyPage({ params }: { params: Promise<{ id: s
     const waText = encodeURIComponent(`Halo, saya tertarik dengan properti "${p.title}" di ${p.location}. Bisa minta info lebih lanjut?\n\nCek di sini: ${shareUrl}`);
 
     // Use agent's phone number if available
-    const agentPhone = p.agent?.phoneNumber ? p.agent.phoneNumber.replace(/\D/g, '') : '';
+    let agentPhone = p.agent?.phoneNumber ? p.agent.phoneNumber.replace(/\D/g, '') : '';
+    if (agentPhone.startsWith('0')) {
+        agentPhone = '62' + agentPhone.slice(1);
+    }
     // Default to empty if no phone number, causing the link to open WhatsApp without a specific number or handle gracefully
     const waLink = agentPhone ? `https://wa.me/${agentPhone}?text=${waText}` : '#';
 
     const handleCopy = () => {
         if (typeof window !== 'undefined') {
-            navigator.clipboard.writeText(window.location.href);
-            alert('Link berhasil disalin!');
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(window.location.href);
+                alert('Link berhasil disalin!');
+            } else {
+                const textArea = document.createElement("textarea");
+                textArea.value = window.location.href;
+                textArea.style.position = "fixed";
+                textArea.style.left = "-999999px";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    alert('Link berhasil disalin!');
+                } catch (err) {
+                    alert('Gagal menyalin link. Silakan salin URL di atas (address bar).');
+                }
+                textArea.remove();
+            }
         }
     };
 

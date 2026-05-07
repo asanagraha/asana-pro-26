@@ -97,10 +97,28 @@ export default function ListingPage() {
                                     <div className="d-flex gap-2">
                                         <Link href={`/app/listing/${p.id}`} className="btn btn-sm btn-outline-dark flex-grow-1 rounded-3">Edit</Link>
                                         <button
-                                            onClick={() => {
+                                            onClick={(e) => {
+                                                e.preventDefault();
                                                 const url = `${window.location.origin}/p/${p.id}`;
-                                                navigator.clipboard.writeText(url);
-                                                alert('Link Landing Page Properti berhasil disalin!');
+                                                if (navigator.clipboard && window.isSecureContext) {
+                                                    navigator.clipboard.writeText(url);
+                                                    alert('Link Landing Page Properti berhasil disalin!');
+                                                } else {
+                                                    const textArea = document.createElement("textarea");
+                                                    textArea.value = url;
+                                                    textArea.style.position = "fixed";
+                                                    textArea.style.left = "-999999px";
+                                                    document.body.appendChild(textArea);
+                                                    textArea.focus();
+                                                    textArea.select();
+                                                    try {
+                                                        document.execCommand('copy');
+                                                        alert('Link Landing Page Properti berhasil disalin!');
+                                                    } catch (err) {
+                                                        alert('Gagal menyalin link. Silakan buka halaman Edit untuk menyalin.');
+                                                    }
+                                                    textArea.remove();
+                                                }
                                             }}
                                             className="btn btn-sm btn-dark rounded-3 px-3"
                                             title="Share Link"

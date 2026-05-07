@@ -1,15 +1,20 @@
 "use client";
 import React, { useEffect, useState } from 'react';
-import { getAdminReports } from '../../../actions';
+import { getAdminReports, getActivityLogs } from '../../../actions';
 import { Utils } from '@/lib/utils';
 
 export default function AdminReportsPage() {
     const [data, setData] = useState<any>(null);
+    const [logs, setLogs] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [tab, setTab] = useState<'marketing' | 'deals' | 'summary'>('marketing');
+    const [tab, setTab] = useState<'marketing' | 'deals' | 'summary' | 'logs'>('marketing');
 
     useEffect(() => {
-        getAdminReports().then(res => { setData(res); setLoading(false); });
+        Promise.all([getAdminReports(), getActivityLogs()]).then(([res, logsData]) => {
+            setData(res);
+            setLogs(logsData);
+            setLoading(false);
+        });
     }, []);
 
     if (loading) return <div className="p-4 text-secondary">Memuat laporan...</div>;
@@ -26,10 +31,10 @@ export default function AdminReportsPage() {
                     <div className="text-secondary small">Data real-time — tidak perlu laporan manual dari marketing</div>
 
                     <div className="d-flex gap-2 mt-3 flex-wrap">
-                        {(['marketing', 'deals', 'summary'] as const).map(t => (
+                        {(['marketing', 'deals', 'summary', 'logs'] as const).map(t => (
                             <button key={t} onClick={() => setTab(t)}
                                 className={`btn btn-sm rounded-4 flex-fill flex-md-grow-0 ${tab === t ? 'btn-dark' : 'btn-outline-secondary'}`}>
-                                {t === 'marketing' ? '👥 Per Marketing' : t === 'deals' ? '🤝 Semua Deal' : '💰 Keuangan'}
+                                {t === 'marketing' ? '👥 Per Marketing' : t === 'deals' ? '🤝 Semua Deal' : t === 'summary' ? '💰 Keuangan' : '📋 Aktivitas'}
                             </button>
                         ))}
                     </div>
@@ -195,6 +200,35 @@ export default function AdminReportsPage() {
                                 ))
                             )}
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Tab: Activity Logs */}
+            {tab === 'logs' && (
+                <div className="ap-card card border-0 shadow-sm">
+                    <div className="card-body p-3 p-md-4">
+                        <div className="fw-semibold mb-3">Semua Aktivitas Marketing</div>
+                        {logs.length === 0 ? (
+                            <div className="text-secondary small text-center py-4">Belum ada aktivitas.</div>
+                        ) : (
+                            <div className="d-grid gap-3">
+                                {logs.map((log) => (
+                                    <div key={log.id} className="d-flex gap-3 align-items-start p-3 bg-light rounded-4 border">
+                                        <div className="bg-white rounded-circle d-flex align-items-center justify-content-center shadow-sm" style={{ width: '40px', height: '40px', flexShrink: 0 }}>
+                                            <div className="fw-bold text-dark">{log.user?.name?.slice(0, 1).toUpperCase()}</div>
+                                        </div>
+                                        <div>
+                                            <div className="fw-bold">{log.user?.name} <span className="text-secondary fw-normal">melakukan</span> {log.action}</div>
+                                            <div className="text-secondary small">{log.details}</div>
+                                            <div className="text-muted small mt-1" style={{ fontSize: '0.75rem' }}>
+                                                {Utils.fmtDate(log.createdAt)} · {new Date(log.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

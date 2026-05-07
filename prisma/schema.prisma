@@ -21,6 +21,7 @@ model Agency {
   users      User[]
   properties Property[]
   expenses   AgencyExpense[]
+  activityLogs ActivityLog[]
 }
 
 model User {
@@ -37,6 +38,8 @@ model User {
   // Relations
   clients Client[]   // Marketing: klien milik sendiri
   deals   Deal[]     // Deal yang ditutup oleh Marketing ini
+  addedProperties Property[] @relation("PropertyAddedBy")
+  activityLogs ActivityLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -65,6 +68,9 @@ model Property {
 
   agencyId String
   agency   Agency @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  addedById String?
+  addedBy   User? @relation("PropertyAddedBy", fields: [addedById], references: [id])
 
   images PropertyImage[]
   deals  Deal[]
@@ -238,4 +244,18 @@ enum ExpenseCategory {
   MARKETING_FEE
   SALARY
   OTHER
+}
+
+model ActivityLog {
+  id          String   @id @default(uuid())
+  action      String   // e.g., "ADD_CLIENT", "ADD_PROPERTY", "FOLLOW_UP", "ADD_PAYMENT"
+  details     String?  // JSON string or plain text description
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  agencyId    String
+  agency      Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
 }

@@ -95,6 +95,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                 {navItem('/app/deals', 'Deal & Pembayaran', 'receipt-outline')}
                                 {isAdmin && navItem('/app/admin/finance', 'Keuangan', 'cash-outline')}
                                 {isAdmin && navItem('/app/admin/reports', 'Laporan', 'stats-chart-outline')}
+                                {!isAdmin && navItem('/app/reports', 'Laporan Aktivitas', 'document-text-outline')}
                                 {isAdmin && navItem('/app/admin/team', 'Tim Marketing', 'people-circle-outline')}
                                 {navItem('/app/settings', 'Pengaturan', 'settings-outline')}
                             </div>
@@ -117,7 +118,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         {bottomItem('/app/deals', 'Deal', 'receipt-outline')}
                         {isAdmin
                             ? bottomItem('/app/admin/reports', 'Laporan', 'stats-chart-outline')
-                            : bottomItem('/app/settings', 'Setting', 'settings-outline')
+                            : bottomItem('/app/reports', 'Laporan', 'document-text-outline')
                         }
                     </div>
                 </div>
