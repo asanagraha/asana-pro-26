@@ -1,10 +1,19 @@
 "use client";
-import { useActionState } from 'react';
+import { useActionState, useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { loginUser } from '../actions';
 
-export default function LoginPage() {
+function LoginForm() {
     const [state, action, isPending] = useActionState(loginUser, null);
+    const searchParams = useSearchParams();
+    const [successMsg, setSuccessMsg] = useState('');
+
+    useEffect(() => {
+        if (searchParams.get('verified') === '1') {
+            setSuccessMsg('Email berhasil diverifikasi! Silakan login sekarang.');
+        }
+    }, [searchParams]);
 
     return (
         <div className="min-vh-100 bg-light d-flex align-items-center justify-content-center p-3">
@@ -32,9 +41,22 @@ export default function LoginPage() {
                                 placeholder="min 6 karakter" />
                         </div>
 
+                        {successMsg && (
+                            <div className="alert alert-success rounded-4 py-2 small mb-0">
+                                ✅ {successMsg}
+                            </div>
+                        )}
+
                         {state?.message && (
                             <div className="alert alert-danger rounded-4 py-2 small mb-0">
                                 {state.message}
+                                {(state as any)?.needsVerification && (
+                                    <div className="mt-2">
+                                        <Link href="/verify-email" className="fw-semibold text-danger">
+                                            → Verifikasi Email Sekarang
+                                        </Link>
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -56,3 +78,16 @@ export default function LoginPage() {
         </div>
     );
 }
+
+export default function LoginPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-vh-100 bg-light d-flex align-items-center justify-content-center">
+                <div className="spinner-border text-secondary" role="status" />
+            </div>
+        }>
+            <LoginForm />
+        </Suspense>
+    );
+}
+

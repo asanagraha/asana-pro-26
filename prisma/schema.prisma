@@ -31,6 +31,11 @@ model User {
   phoneNumber String?
   role        UserRole @default(MARKETING)
 
+  // Email verification (only required for ADMIN role during registration)
+  emailVerified      Boolean   @default(true)
+  verificationToken  String?   @unique
+  verificationExpiry DateTime?
+
   agencyId String
   agency   Agency @relation(fields: [agencyId], references: [id], onDelete: Cascade)
 

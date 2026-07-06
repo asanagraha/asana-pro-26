@@ -7,6 +7,7 @@ import bcrypt from 'bcryptjs'
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
 import { UserRole } from '@prisma/client'
+import { sendVerificationEmail, sendMarketingWelcomeEmail, generateOTP } from '@/lib/email'
 
 const SECRET_KEY = new TextEncoder().encode(process.env.JWT_SECRET || 'default-secret-key-change-me')
 
@@ -30,6 +31,26 @@ export async function loginUser(prevState: any, formData: FormData) {
 
         const isValid = await bcrypt.compare(pin, user.password)
         if (!isValid) return { message: 'PIN salah' }
+
+        // Block ADMIN who has not verified email yet
+        if (user.role === UserRole.ADMIN && !user.emailVerified) {
+            // Re-send OTP and store pending verification in cookie
+            const otp = generateOTP()
+            const expiry = new Date(Date.now() + 10 * 60 * 1000)
+            await prisma.user.update({
+                where: { id: user.id },
+                data: { verificationToken: otp, verificationExpiry: expiry }
+            })
+            const pendingData = JSON.stringify({ userId: user.id, email: user.email, name: user.name })
+            ;(await cookies()).set('pending_verification', pendingData, {
+                httpOnly: true,
+                maxAge: 60 * 15,
+                path: '/',
+                sameSite: 'lax',
+            })
+            await sendVerificationEmail(user.email, otp, user.name)
+            return { message: 'Email Anda belum diverifikasi. Kode OTP baru telah dikirim ke email Anda.', needsVerification: true }
+        }
 
         const token = await new SignJWT({
             userId: user.id,
@@ -118,13 +139,17 @@ export async function registerAgency(prevState: any, formData: FormData) {
     if (!agencyName || !name || !email || !pin) return { message: 'Semua field wajib diisi' }
     if (pin.length < 6) return { message: 'PIN minimal 6 karakter' }
 
+    let userId: string | null = null
+
     try {
         const existing = await prisma.user.findUnique({ where: { email } })
         if (existing) return { message: 'Email sudah terdaftar' }
 
         const hashedPassword = await bcrypt.hash(pin, 10)
+        const otp = generateOTP()
+        const expiry = new Date(Date.now() + 10 * 60 * 1000)
 
-        await prisma.agency.create({
+        const agency = await prisma.agency.create({
             data: {
                 name: agencyName,
                 users: {
@@ -133,29 +158,137 @@ export async function registerAgency(prevState: any, formData: FormData) {
                         email,
                         password: hashedPassword,
                         phoneNumber,
-                        role: UserRole.ADMIN
+                        role: UserRole.ADMIN,
+                        emailVerified: false,
+                        verificationToken: otp,
+                        verificationExpiry: expiry,
                     }
                 }
-            }
+            },
+            include: { users: true }
         })
+
+        userId = agency.users[0]?.id || null
+
+        // Store pending verification data in cookie (15 min)
+        const pendingData = JSON.stringify({ userId, email, name })
+        ;(await cookies()).set('pending_verification', pendingData, {
+            httpOnly: true,
+            maxAge: 60 * 15,
+            path: '/',
+            sameSite: 'lax',
+        })
+
+        // Send OTP email
+        const emailResult = await sendVerificationEmail(email, otp, name)
+        if (!emailResult.success) {
+            console.warn('Email sending failed, but user created. OTP:', otp)
+        }
     } catch (e) {
         console.error(e)
         return { message: `Gagal mendaftar: ${(e as any)?.message || 'Unknown error'}` }
     }
 
-    redirect('/login')
+    redirect('/verify-email')
 }
 
 export async function verifyOTP(prevState: any, formData: FormData) {
-    return { success: false, message: 'Belum diimplementasikan' }
+    const otp = (formData.get('otp') as string)?.trim()
+    if (!otp) return { message: 'Kode OTP wajib diisi' }
+
+    try {
+        const cookieStore = await cookies()
+        const pendingRaw = cookieStore.get('pending_verification')?.value
+        if (!pendingRaw) return { message: 'Sesi verifikasi tidak ditemukan. Silakan daftar ulang.' }
+
+        const pending = JSON.parse(pendingRaw) as { userId: string; email: string; name: string }
+
+        const user = await prisma.user.findUnique({
+            where: { id: pending.userId }
+        })
+
+        if (!user) return { message: 'User tidak ditemukan.' }
+        if (user.emailVerified) {
+            cookieStore.delete('pending_verification')
+            return { message: 'Email sudah diverifikasi sebelumnya. Silakan login.' }
+        }
+        if (!user.verificationToken || user.verificationToken !== otp) {
+            return { message: 'Kode OTP salah. Silakan coba lagi.' }
+        }
+        if (user.verificationExpiry && new Date() > user.verificationExpiry) {
+            return { message: 'Kode OTP telah kedaluwarsa. Silakan kirim ulang.' }
+        }
+
+        // Mark as verified and clear token
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                emailVerified: true,
+                verificationToken: null,
+                verificationExpiry: null,
+            }
+        })
+
+        // Clear pending cookie
+        cookieStore.delete('pending_verification')
+    } catch (e) {
+        console.error(e)
+        return { message: 'Terjadi kesalahan. Silakan coba lagi.' }
+    }
+
+    redirect('/login?verified=1')
 }
 
 export async function resendOTP() {
-    return { success: false, message: 'Belum diimplementasikan' }
+    try {
+        const cookieStore = await cookies()
+        const pendingRaw = cookieStore.get('pending_verification')?.value
+        if (!pendingRaw) return { success: false, message: 'Sesi verifikasi tidak ditemukan.' }
+
+        const pending = JSON.parse(pendingRaw) as { userId: string; email: string; name: string }
+
+        const user = await prisma.user.findUnique({ where: { id: pending.userId } })
+        if (!user) return { success: false, message: 'User tidak ditemukan.' }
+        if (user.emailVerified) return { success: false, message: 'Email sudah diverifikasi.' }
+
+        const otp = generateOTP()
+        const expiry = new Date(Date.now() + 10 * 60 * 1000)
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { verificationToken: otp, verificationExpiry: expiry }
+        })
+
+        // Refresh cookie expiry
+        cookieStore.set('pending_verification', pendingRaw, {
+            httpOnly: true,
+            maxAge: 60 * 15,
+            path: '/',
+            sameSite: 'lax',
+        })
+
+        const emailResult = await sendVerificationEmail(user.email, otp, user.name)
+        if (!emailResult.success) {
+            return { success: false, message: 'Gagal mengirim email. Coba lagi.' }
+        }
+
+        return { success: true, message: 'Kode OTP baru telah dikirim ke email Anda.' }
+    } catch (e) {
+        console.error(e)
+        return { success: false, message: 'Terjadi kesalahan server.' }
+    }
 }
 
 export async function getPendingVerificationUser() {
-    return null
+    try {
+        const cookieStore = await cookies()
+        const pendingRaw = cookieStore.get('pending_verification')?.value
+        if (!pendingRaw) return null
+        const pending = JSON.parse(pendingRaw) as { userId: string; email: string; name: string }
+        return { email: pending.email, name: pending.name }
+    } catch {
+        return null
+    }
 }
 
 // ─────────────────────────────────────────────
@@ -259,12 +392,21 @@ export async function createMarketingUser(formData: FormData) {
                 password: hashedPassword,
                 phoneNumber,
                 role: UserRole.MARKETING,
-                agencyId: session.agencyId
+                agencyId: session.agencyId,
+                emailVerified: true, // Marketing langsung aktif, tidak perlu verifikasi
             }
         })
+
+        // Kirim email selamat datang dengan tautan login dan kredensial
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.asanagraha.com'
+        const loginUrl = `${appUrl}/login`
+        const agencyName = session.agency?.name || 'AsanaPro Agency'
+        await sendMarketingWelcomeEmail(email, name, agencyName, pin, loginUrl)
+
         revalidatePath('/app/admin/team')
         return { success: true }
     } catch (e) {
+        console.error(e)
         return { success: false, message: 'Gagal membuat user' }
     }
 }
