@@ -42,12 +42,12 @@ export async function loginUser(prevState: any, formData: FormData) {
                 data: { verificationToken: otp, verificationExpiry: expiry }
             })
             const pendingData = JSON.stringify({ userId: user.id, email: user.email, name: user.name })
-            ;(await cookies()).set('pending_verification', pendingData, {
-                httpOnly: true,
-                maxAge: 60 * 15,
-                path: '/',
-                sameSite: 'lax',
-            })
+                ; (await cookies()).set('pending_verification', pendingData, {
+                    httpOnly: true,
+                    maxAge: 60 * 15,
+                    path: '/',
+                    sameSite: 'lax',
+                })
             await sendVerificationEmail(user.email, otp, user.name)
             return { message: 'Email Anda belum diverifikasi. Kode OTP baru telah dikirim ke email Anda.', needsVerification: true }
         }
@@ -172,12 +172,12 @@ export async function registerAgency(prevState: any, formData: FormData) {
 
         // Store pending verification data in cookie (15 min)
         const pendingData = JSON.stringify({ userId, email, name })
-        ;(await cookies()).set('pending_verification', pendingData, {
-            httpOnly: true,
-            maxAge: 60 * 15,
-            path: '/',
-            sameSite: 'lax',
-        })
+            ; (await cookies()).set('pending_verification', pendingData, {
+                httpOnly: true,
+                maxAge: 60 * 15,
+                path: '/',
+                sameSite: 'lax',
+            })
 
         // Send OTP email
         const emailResult = await sendVerificationEmail(email, otp, name)
@@ -398,7 +398,7 @@ export async function createMarketingUser(formData: FormData) {
         })
 
         // Kirim email selamat datang dengan tautan login dan kredensial
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.asanagraha.com'
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://asanapro.id'
         const loginUrl = `${appUrl}/login`
         const agencyName = session.agency?.name || 'AsanaPro Agency'
         await sendMarketingWelcomeEmail(email, name, agencyName, pin, loginUrl)
@@ -479,7 +479,7 @@ export async function getPublicProperty(id: string) {
             }
         })
         if (!prop) return null;
-        
+
         const admin = prop.agency?.users?.[0];
         const defaultName = admin?.name || 'Agen';
         const defaultPhone = admin?.phoneNumber || '';
@@ -554,7 +554,7 @@ export async function updateProperty(id: string, formData: FormData) {
                 features: formData.get('features') as string || undefined,
             }
         })
-        
+
         const imagesRaw = formData.get('images') as string
         if (imagesRaw) {
             const images = JSON.parse(imagesRaw || '[]')
@@ -856,7 +856,7 @@ export async function createDeal(formData: FormData) {
 export async function updateDeal(id: string, formData: FormData) {
     const session = await getSession();
     if (!session) return { success: false, message: 'Unauthorized' };
-    
+
     const dealPriceRaw = formData.get('dealPrice') as string;
     const dealPrice = parseFloat(dealPriceRaw);
     const totalInstallments = parseInt(formData.get('totalInstallments') as string) || undefined;
@@ -877,18 +877,18 @@ export async function updateDeal(id: string, formData: FormData) {
                 rentEndDate: rentEndRaw ? new Date(rentEndRaw) : undefined,
             }
         });
-        
+
         const dealType = formData.get('dealType') as string;
-        if(dealType) {
-            const deal = await prisma.deal.findUnique({where: {id}, select: {propertyId: true}});
-            if(deal) {
+        if (dealType) {
+            const deal = await prisma.deal.findUnique({ where: { id }, select: { propertyId: true } });
+            if (deal) {
                 await prisma.property.update({
                     where: { id: deal.propertyId },
                     data: { status: dealType === 'SALE' ? 'SOLD' : 'RENTED' }
                 });
             }
         }
-        
+
         const dealInfo = await prisma.deal.findUnique({
             where: { id },
             include: { payments: true }
@@ -898,7 +898,7 @@ export async function updateDeal(id: string, formData: FormData) {
             let newStatus = 'PENDING';
             if (totalPaid >= dealInfo.dealPrice) newStatus = 'COMPLETED';
             else if (totalPaid > 0) newStatus = 'IN_PROGRESS';
-            
+
             if (dealInfo.paymentStatus !== newStatus) {
                 await prisma.deal.update({ where: { id }, data: { paymentStatus: newStatus as any } });
             }
@@ -906,7 +906,7 @@ export async function updateDeal(id: string, formData: FormData) {
 
         revalidatePath('/app/deals');
         return { success: true };
-    } catch(e) {
+    } catch (e) {
         return { success: false, message: 'Gagal update deal' };
     }
 }
@@ -1000,7 +1000,7 @@ export async function deletePayment(id: string, dealId: string) {
 
     try {
         await prisma.payment.delete({ where: { id } })
-        
+
         const dealInfo = await prisma.deal.findUnique({
             where: { id: dealId },
             include: { payments: true }
@@ -1010,7 +1010,7 @@ export async function deletePayment(id: string, dealId: string) {
             let newStatus = 'PENDING';
             if (totalPaid >= dealInfo.dealPrice) newStatus = 'COMPLETED';
             else if (totalPaid > 0) newStatus = 'IN_PROGRESS';
-            
+
             if (dealInfo.paymentStatus !== newStatus) {
                 await prisma.deal.update({ where: { id: dealId }, data: { paymentStatus: newStatus as any } });
             }
@@ -1054,7 +1054,7 @@ export async function updatePayment(id: string, dealId: string, formData: FormDa
             let newStatus = 'PENDING';
             if (totalPaid >= dealInfo.dealPrice) newStatus = 'COMPLETED';
             else if (totalPaid > 0) newStatus = 'IN_PROGRESS';
-            
+
             if (dealInfo.paymentStatus !== newStatus) {
                 await prisma.deal.update({
                     where: { id: dealId },
