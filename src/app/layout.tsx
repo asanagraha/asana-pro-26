@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-// import 'bootstrap/dist/css/bootstrap.min.css'; // Don't import here if using CDN in head, but better to import package if installed.
-// We installed bootstrap package, so we should import it.
 import 'bootstrap/dist/css/bootstrap.min.css';
 import "./globals.css";
 import Script from "next/script";
+import { GoogleAnalytics } from '@next/third-parties/google';
 import { PWASessionManager } from "@/components/PWASessionManager";
 
 export const metadata: Metadata = {
@@ -29,6 +28,7 @@ export default function RootLayout({
         <Script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js" strategy="lazyOnload" />
         <Script id="ionicons-nomodule" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js" strategy="lazyOnload" />
       </body>
+      <GoogleAnalytics gaId="G-T5022DKPYE" />
     </html>
   );
 }
