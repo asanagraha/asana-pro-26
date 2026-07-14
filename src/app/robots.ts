@@ -9,6 +9,6 @@ export default function robots(): MetadataRoute.Robots {
                 disallow: ['/app/', '/api/', '/verify-email', '/onboarding'],
             },
         ],
-        sitemap: 'https://asanpro.id/sitemap.xml',
+        sitemap: 'https://asanapro.id/sitemap.xml',
     };
 }
