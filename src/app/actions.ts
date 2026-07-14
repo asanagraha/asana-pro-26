@@ -81,24 +81,25 @@ export async function loginUser(prevState: any, formData: FormData) {
 export async function getSession() {
     try {
         const sessionToken = (await cookies()).get('session')?.value
-        if (!sessionToken) return null
+        if (!sessionToken) {
+            console.log('[getSession] Tidak ada cookie session sama sekali')
+            return null
+        }
 
         const { payload } = await jwtVerify(sessionToken, SECRET_KEY)
         const user = await prisma.user.findUnique({
             where: { id: payload.userId as string },
             select: {
-                id: true,
-                email: true,
-                name: true,
-                phoneNumber: true,
-                role: true,
-                agencyId: true,
-                agency: { select: { id: true, name: true, address: true } },
-                updatedAt: true
+                id: true, email: true, name: true, phoneNumber: true, role: true, agencyId: true,
+                agency: { select: { id: true, name: true, address: true } }, updatedAt: true
             }
         })
+        if (!user) {
+            console.log('[getSession] JWT valid, tapi user tidak ditemukan di database. userId:', payload.userId)
+        }
         return user
-    } catch {
+    } catch (e) {
+        console.error('[getSession] ERROR:', e)   // ← INI YANG PENTING, sebelumnya silent
         return null
     }
 }
